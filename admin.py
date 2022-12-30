@@ -1,5 +1,12 @@
-# Author: Ritchie Yapp
-# Admin number: 2205810
+"""Author: Ritchie Yapp
+Admin number: 2205810
+
+Known issues:
+
+TO-DO: add password recovery using email collection
+consider merging updateSetting() and strictInput()
+(IMPORTANT) hash shadow.json
+"""
 import getpass
 import json
 import os
@@ -185,6 +192,7 @@ def addWords():
     time.sleep(2)
 
 def wRem():
+    #void function to remove words in ./data/word_list.txt
     os.system('cls')
     fWords = open("./data/word_list.txt")
     words = fWords.readlines()
@@ -216,6 +224,7 @@ def wRem():
     time.sleep(2)
 
 def uRem():
+    #void function to remove user in ./data/shadow.json
     os.system('cls')
     global shadowLines, lg
     while True:
@@ -252,8 +261,9 @@ def uRem():
                 print("User does not exist") #lg should be in the shadowLines.keys() so it will never print out both error messages
     
 def uInit(fTime=False):
+    """ void function to create a user and append to 
+    fTime: indicates first time initialisation to avoid loading empty json file which also is exception in exception"""
     os.system('cls')
-    #fTime: indicates first time initialisation to avoid loading empty json file which also is exception in exception
     if fTime:
         print("File empty, performing initialisation")
     print("Create new user")
