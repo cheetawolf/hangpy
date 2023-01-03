@@ -1,19 +1,37 @@
 """Author: Ritchie Yapp
 Admin number: 2205810
 
-Known issues:
+Known issues: (SECURITY) Deleting ./data/shadow.json results in a password reset
 
-TO-DO: add password recovery using email collection
+TODO: add password recovery using email collection
 consider merging updateSetting() and strictInput()
 (IMPORTANT) hash shadow.json
+(not important) accept end dates that are later than start date but end dates 
+before start dates will just not produce any output
 """
 import getpass
+import datetime
+from datetime import date
 import json
 import os
 import time
 lg = "" #global variable is the user logged in used for uRem() where it needs only password input
 
 def updateSetting(setting):
+    """ updates the setting in gameSettings() where setting is a key in 
+    the json file ./data/game_log.json
+    Args:
+        setting (str): a key in the json file ./data/game_log.json
+    Returns:
+        "Cancelling operation": if user has chosen to abort during this function
+        the gameSettings() function receiving this value will 
+        abort and print this message in the main menu as it returns
+
+        (f"Operation successful, {setting}: {intBuffer}", intBuffer): A successful 
+        operation will return a time where index 0 is a message to be printed in the 
+        main menu as it exits. Index 1 is the integer (input done and checked valid by strictInput())
+        which the user input as the new value for the setting.
+    """
     intBuffer = strictInput(setting) #get int input through strictInput
     if intBuffer == "override": #special str value to cancel operation
         return "Cancelling operation"
@@ -29,7 +47,9 @@ def strictInput(msg):
                 return "override" #return to the previous screen, after
             else: 
                 inp = str(inp)
-            if not inp.isnumeric() or inp < 1: #think about it, -1 players would not sound good
+            if not inp.isnumeric(): #think about it, -1 players would not sound good
+                raise ValueError
+            elif int(inp) < 1:
                 raise ValueError
             break 
         except ValueError:
@@ -49,8 +69,14 @@ def csValid(string):
     return [True, string]
 
 #gameSettings() will declare global var and access this when needed
-defaultSettings = {"attempts": "3", "words": "3", "players": "4", "mistakes": "5", "score": "2"} 
+defaultSettings = {"attempts": "3", "max": "30", "players": "4", "mistakes": "5", "score": "2"} 
 def gameSettings():
+    """
+    Subfunction, option 1 of the main admin menu, modifies the hangman game settings
+    or clears the leaderboard or prints logs filtered by a valid date.
+    No arguments or output 
+    """
+    global shadowLines, lg
     fSettings = open("./data/game_settings.json")
     try: 
         opLog = "Game settings" #log messages after each operation
@@ -64,22 +90,24 @@ def gameSettings():
         settings = defaultSettings #working dictionary 
         opLog = "Game settings, using default settings due to first time use or corruption in game_settings.json"
     uInp = 0
-    while uInp != 6:
+    while uInp != 8:
         os.system('cls') #called after every successful or non successful operation
         print(f"""
 {opLog}
 
 1) Number of attempts: {settings["attempts"]}
-2) Number of words: {settings["words"]}
-3) Number of players: {settings["players"]}
+2) Max score: {settings["max"]}
+3) Number of players on leaderboard: {settings["players"]}
 4) Mistakes per attempt: {settings["mistakes"]}
 5) Score increment per correct guess: {settings["score"]}
-6) Save and exit
+6) Clear leaderboard
+7) Print report
+8) Save and exit
         """)
         while True:
             try: 
                 uInp = int(input("Enter option: "))
-                if uInp not in range(1, 7):
+                if uInp not in range(1, 9):
                     raise ValueError
                 break
             except ValueError:
@@ -89,7 +117,7 @@ def gameSettings():
             case 1: #strict inputs only, tried making it a function but this needs to work locally ugh
                 hSettings = "attempts"
             case 2: 
-                hSettings = "words"
+                hSettings = "max"
             case 3:
                 hSettings = "players"
             case 4: 
@@ -97,17 +125,70 @@ def gameSettings():
             case 5:
                 hSettings = "score"
             case 6:
-                break
-        opLog = updateSetting(hSettings)
-        if type(opLog) == tuple:
-            settings[hSettings] = opLog[1] 
-            opLog = opLog[0]
+                while True:
+                    userPass = getpass.getpass("Please enter the admin password (enter to exit): \n")
+                    if userPass == "":
+                        break
+                    if userPass == shadowLines[lg]["password"]:
+                        opLog = "Leaderboard has been reset"
+                        with open("./data/game_log.json", "w") as wList:
+                            json.dump({}, wList)
+                        break
+                    else:
+                        print("Password is incorrect")
+            case 7:
+                os.system('cls')
+                while True:
+                    try:
+                        sDate = input("Input start date (YYYY-MM-DD) or enter to use default date: ")
+                        if sDate == "":
+                            sDate = "1970-01-01"
+                        eDate = input("Input end date (YYYY-MM-DD) or enter to use today's date: ")
+                        if eDate == "":
+                            eDate = str(date.today())
+                        for bDate in (sDate, eDate):
+                            if bDate[4] != "-" or bDate[7] != "-" or len(bDate) != 10:
+                                raise ValueError #must use '-' to split
+                            year, month, day = bDate.split('-')
+                            datetime.datetime(int(year), int(month), int(day))
+                        break
+                    except ValueError:
+                        print("Invalid input please try again")
+                #overwrite the str dates as a datetime object
+                year, month, day = sDate.split('-')
+                sDate = datetime.datetime(int(year), int(month), int(day))
+                year, month, day = eDate.split('-')
+                eDate = datetime.datetime(int(year), int(month), int(day))
+                with open("./data/game_log.json") as gLog:
+                    gameLog = json.load(gLog)
+                os.system('cls')
+                refName = "name" #used as a pointer to settings as strings in fstrings conflict in next line
+                refScore = "score"
+                refDate = "date"
+                for key in gameLog.keys():
+                    dateBuffer = gameLog[key]["date"]
+                    year, month, day = dateBuffer.split('-')
+                    dateBuffer = datetime.datetime(int(year), int(month), int(day))
+                    if dateBuffer >= sDate and dateBuffer <= eDate: #compare
+                        print(f"#{key}: {gameLog[key][refName]}, Score: {gameLog[key][refScore]}, Date: {gameLog[key][refDate]}")
+                input("Press any key to return: ")
+        if hSettings != "":
+            opLog = updateSetting(hSettings)
+            if type(opLog) == tuple:
+                settings[hSettings] = opLog[1] 
+                opLog = opLog[0]
     fSettings = open("./data/game_settings.json", "w")
     json.dump(settings, fSettings, indent=4) #write the json parsed dictionary
     fSettings.close()
     
 #warning: no of words < attempts cannot be allowed as it breaks given current hangman algorithm
+#EDIT: has been resolved on client side, now terminates the program and requires admin to input 
+# (words > attempt)
 def auth():
+    """_summary_
+    Returns:
+        (boolean value of True if username and password is correct, else False)
+    """
     global shadowLines, lg
     while True:
         while True:
@@ -126,7 +207,11 @@ def auth():
             print("Incorrect password")
 
 def menu():
-    #returns 1 if terminated else returns 0, to determine whether to loop
+    """
+    No arguments
+    Prints menu, takes in an input within the function, calls subfunctions based on the input 
+    returns: 0 or 1, 0 will tell the program (in the main function last few lines)
+    """
     os.system('cls')
     menuHead = "Admin panel" #to be used in adMenu as syntax bypass xd
     adMenu = f"""
@@ -164,6 +249,9 @@ def menu():
     return 0
 
 def addWords():
+    """add words to ./data/word_list.txt, no input
+    no output
+    """
     os.system('cls')
     with open("./data/word_list.txt", "r") as fWords:
         words = fWords.readlines()
@@ -224,7 +312,7 @@ def wRem():
     time.sleep(2)
 
 def uRem():
-    #void function to remove user in ./data/shadow.json
+    #void function to remove user in ./data/shadow.json, no output nor args 
     os.system('cls')
     global shadowLines, lg
     while True:
@@ -243,7 +331,7 @@ def uRem():
             print("Cannot remove user that is currently logged on now. Contact your administrator.")
         else:
             if uName in shadowLines.keys():
-                proc = input(f"Enter \'Y\' to confirm the deletion of {uName}. This action is irreversible") #input to confirm action
+                proc = input(f"Enter \'Y\' to confirm the deletion of {uName}. This action is irreversible: ") #input to confirm action
                 os.system('cls')
                 if proc.lower().strip() == "y":
                     del(shadowLines[uName])
@@ -262,7 +350,8 @@ def uRem():
     
 def uInit(fTime=False):
     """ void function to create a user and append to 
-    fTime: indicates first time initialisation to avoid loading empty json file which also is exception in exception"""
+    fTime: indicates first time initialisation to avoid loading empty json file which also is exception in exception
+    no output"""
     os.system('cls')
     if fTime:
         print("File empty, performing initialisation")
@@ -273,7 +362,7 @@ def uInit(fTime=False):
         if fTime != True: #no shadowLines if init so this avoids exception in the next line
             if userName in shadowLines: 
                 if input("User exists in database, change password instead?\nEnter \'Y\' to proceed: ").lower().strip() != "y":
-                    return 0
+                    return
         while True:
             valid = 0
             userPass = getpass.getpass("Please enter the admin password: \n")
@@ -333,7 +422,7 @@ def uInit(fTime=False):
                 print("Input email address does not contain \'@\'")
         if input(f"\nIs this email correct? {userEmail} enter \'y\' to confirm: ").lower().strip() == "y":
             break
-    #REMEMBER TO HASH YOUR SHIT HERE!!!
+    #REMEMBER TO HASH HERE!!!
     data = {userName: {"password": userPass, "email": userEmail}}
     if not fTime:
         #consider reading shadowLines here instead of using the start of program state of the file
@@ -372,4 +461,3 @@ if authState: #successful authentication returns true else terminates program
             break #normal program termination 
 else: 
     exit()
-#test case password: 1Qwer$#@!
